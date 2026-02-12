@@ -6,6 +6,7 @@ import gc
 from typing import Optional
 from datetime import datetime
 import validators
+import aiohttp
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -34,6 +35,9 @@ logging.basicConfig(
     level=logging.INFO if not os.getenv('DEBUG') else logging.DEBUG
 )
 logger = logging.getLogger(__name__)
+
+# Constants
+MIN_THUMBNAIL_SIZE_BYTES = 100  # Minimum thumbnail size to consider valid
 
 class TikTokBot:
     """
@@ -83,12 +87,11 @@ class TikTokBot:
             return None
         
         try:
-            import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.get(thumbnail_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 200:
                         data = await resp.read()
-                        if len(data) > 100:  # basic validity check
+                        if len(data) > MIN_THUMBNAIL_SIZE_BYTES:
                             logger.info(f"Successfully fetched thumbnail ({len(data)} bytes)")
                             return data
                         else:
