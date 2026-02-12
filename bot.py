@@ -70,6 +70,34 @@ class TikTokBot:
         # Format: {user_id: {'url': original_url, 'video_url': direct_link, 'result': video_info}}
         self.pending_large_files = {}
 
+    async def _fetch_thumbnail(self, thumbnail_url: str) -> Optional[bytes]:
+        """Download thumbnail image for video preview
+        
+        Args:
+            thumbnail_url: URL of the thumbnail image
+            
+        Returns:
+            bytes: Thumbnail image data if successful, None otherwise
+        """
+        if not thumbnail_url:
+            return None
+        
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(thumbnail_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.read()
+                        if len(data) > 100:  # basic validity check
+                            logger.info(f"Successfully fetched thumbnail ({len(data)} bytes)")
+                            return data
+                        else:
+                            logger.warning(f"Thumbnail too small ({len(data)} bytes), skipping")
+        except Exception as e:
+            logger.warning(f"Failed to fetch thumbnail: {e}")
+        
+        return None
+
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command"""
         user = update.effective_user
@@ -428,6 +456,9 @@ Choose your preferred quality setting below:
                 upload_success = False
                 last_error = None
                 
+                # Fetch thumbnail if available
+                thumbnail_data = await self._fetch_thumbnail(result.get('thumbnail'))
+                
                 for attempt in range(max_upload_retries):
                     try:
                         with open(temp_file_path, 'rb') as video_file:
@@ -435,6 +466,7 @@ Choose your preferred quality setting below:
                                 chat_id=update.effective_chat.id,
                                 video=video_file,
                                 caption=caption,
+                                thumbnail=thumbnail_data,
                                 supports_streaming=True,
                                 reply_to_message_id=message.message_id,
                                 read_timeout=300,  # 5 minutes for upload
@@ -857,6 +889,9 @@ Your videos will now be downloaded in standard quality for faster downloads and 
             gc.collect()  # Force garbage collection
             logger.info(f"Freed {file_size / (1024*1024):.1f}MB from memory after writing to disk")
 
+            # Fetch thumbnail if available
+            thumbnail_data = await self._fetch_thumbnail(result.get('thumbnail'))
+
             try:
                 # Upload to storage channel with retry logic
                 max_retries = 3
@@ -884,6 +919,7 @@ Your videos will now be downloaded in standard quality for faster downloads and 
                                         f"👤 @{result.get('author', 'Unknown')}\n"
                                         f"📊 {file_size / (1024*1024):.1f}MB\n"
                                         f"🔑 User: {user_id}",
+                                thumbnail=thumbnail_data,
                                 filename=f"tiktok_video_{user_id}.mp4",
                                 connect_timeout=60,
                                 pool_timeout=60,
@@ -930,6 +966,7 @@ Your videos will now be downloaded in standard quality for faster downloads and 
                     chat_id=query.message.chat_id,
                     document=file_id,
                     caption=caption,
+                    thumbnail=thumbnail_data,
                     filename=f"{result.get('title', 'tiktok_video')[:50]}.mp4"
                 )
 
@@ -1078,11 +1115,15 @@ Your videos will now be downloaded in standard quality for faster downloads and 
                     f"🤖 @tikdownload98_bot"
                 )
 
+                # Fetch thumbnail if available
+                thumbnail_data = await self._fetch_thumbnail(result.get('thumbnail'))
+
                 with open(temp_file_path, 'rb') as video_file:
                     await context.bot.send_video(
                         chat_id=query.message.chat_id,
                         video=video_file,
                         caption=caption,
+                        thumbnail=thumbnail_data,
                         supports_streaming=True
                     )
 
